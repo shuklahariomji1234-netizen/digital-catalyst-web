@@ -18,6 +18,7 @@ import {
 import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 
 // --- Component Imports ---
+import AuthLandingPage from "./pages/auth/AuthLandingPage";
 import Header from './components/Header';
 import Hero from './components/Hero';
 import ProductShowcase from './components/ProductShowcase';
