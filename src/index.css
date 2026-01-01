@@ -1,25 +1,26 @@
-/* Global reset */
-* {
+/* ===== GLOBAL HARD RESET (FINAL FIX) ===== */
+
+html, body, #root {
+  width: 100%;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
-/* Base body styles */
-html, body {
+/* FORCE CENTER ALL PAGE WRAPPERS */
+.container,
+.main-container,
+.app-container,
+.page-container,
+.layout,
+.wrapper {
   width: 100%;
-  height: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
+/* IF ANY PAGE USES FLEX LAYOUT */
 body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
-  background-color: #ffffff;
-  color: #111111;
-}
-
-/* React root */
-#root {
-  min-height: 100vh;
-  display: flex;
+  display: block !important;
 }
