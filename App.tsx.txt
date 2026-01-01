@@ -1,0 +1,1343 @@
+import React, { useState, useEffect } from 'react';
+import { db, auth } from './firebase'; 
+import { 
+  doc, 
+  onSnapshot, 
+  setDoc, 
+  collection, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc,
+  getDoc,
+  increment,
+  query,       
+  where,       
+  getDocs      
+} from 'firebase/firestore'; 
+// @ts-ignore
+import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+
+// --- Component Imports ---
+import Header from './components/Header';
+import Hero from './components/Hero';
+import ProductShowcase from './components/ProductShowcase';
+import Services, { ServiceItem } from './components/Services';
+import AboutUs from './components/AboutUs';
+import Faq, { FaqItem } from './components/Faq';
+import Footer from './components/Footer';
+import TrustBadges from './components/TrustBadges';
+import Congratulations from './components/Congratulations';
+import ProductDetailPage from './components/ProductDetailPage';
+import AdminLogin from './components/admin/AdminLogin';
+import AdminDashboard from './components/admin/AdminDashboard';
+import FeaturedProducts from './components/FeaturedProducts';
+import PurchasedProducts from './components/PurchasedProducts';
+import CoursePlayer from './components/CoursePlayer';
+import EbookReader from './components/EbookReader';
+import PolicyPage from './components/PolicyPage';
+import AuthPage from './components/auth/AuthPage';
+import WishlistPage from './components/FavouritesPage';
+import CartSidebar from './components/CartSidebar';
+import QuickViewModal from './components/QuickViewModal';
+import PaymentModal from './components/PaymentModal';
+import UpcomingFeatures, { UpcomingFeatureItem } from './components/UpcomingFeatures';
+import SubscriptionSuccessModal from './components/SubscriptionSuccessModal';
+import LatestNews from './components/LatestNews';
+import ComingSoonModal from './components/ComingSoonModal';
+import BlogModal from './components/Prerequisites';
+import { FreeProductsModal, AnnouncementsModal } from './components/ContentModals';
+import AnnouncementDetail from './components/AnnouncementDetail';
+import SubscriptionPage from './components/SubscriptionPage';
+import SubscriptionCheckoutPage from './components/SubscriptionCheckoutPage';
+
+// --- NEW IMPORT FOR SMART READER ---
+import SmartReader from './components/SmartReader';
+
+// ==========================================
+// --- INTERFACES & TYPES (Detailed) ---
+// ==========================================
+
+export type ProductFileType = 'youtube' | 'video' | 'audio' | 'pdf' | 'doc' | 'sheet' | 'link' | 'ebook';
+
+export interface ProductFile {
+  id: string;
+  name: string;
+  type: ProductFileType;
+  url: string;
+  content?: string;
+}
+
+export interface CourseModule {
+  id: string;
+  title: string;
+  files: ProductFile[];
+  modules: CourseModule[];
+  isLocked?: boolean;
+  individualPrice?: string;
+  paymentLink?: string;
+}
+
+export interface PriceHistoryEntry {
+  date: string;
+  price: number;
+}
+
+export interface Product {
+  id: number;
+  imageSeed: string;
+  images: string[];
+  title: string;
+  description: string;
+  longDescription: string;
+  features: string[];
+  price: string;
+  salePrice?: string;
+  salePriceExpiry?: string;
+  category?: string;
+  department?: 'Men' | 'Women' | 'Unisex';
+  inStock?: boolean;
+  isVisible?: boolean;
+  manualRating?: number | null;
+  sku?: string;
+  tags?: string[];
+  dimensions?: string;
+  fileFormat?: string; // e.g. 'pdf'
+  fileUrl?: string;    // Direct URL for the PDF/File
+  courseContent?: CourseModule[];
+  aspectRatio?: string;
+  priceHistory?: PriceHistoryEntry[];
+  isFree?: boolean;
+  couponCode?: string;
+  paymentLink: string;
+  wishlistCount?: number;
+  viewCount?: number;
+  paymentConfig?: {
+    enabled: boolean;
+    customApiKey?: string;
+    customCurrency?: string;
+    successMessage?: string;
+    redirectUrl?: string;
+  };
+}
+
+export interface Review {
+  id?: string;
+  productId: number;
+  name: string;
+  rating: number;
+  comment: string;
+  date: string;
+}
+
+export interface ProductWithRating extends Product {
+  rating: number;
+  reviewCount: number;
+  calculatedRating: number;
+}
+
+export interface User {
+  id: number;
+  email: string;
+  password: string; 
+  createdAt: string;
+  firebaseUid?: string;
+}
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  password: string;
+  role: 'Developer' | 'Admin';
+}
+
+export interface CartItem {
+  productId: number;
+  quantity: number;
+  type?: 'product' | 'subscription' | 'module';
+  title?: string;
+  price?: string;
+}
+
+export interface Coupon {
+  id: number;
+  code: string;
+  type: 'percentage' | 'fixed';
+  value: number;
+  expiryDate: string;
+  isActive: boolean;
+  usageLimit: number;
+  timesUsed: number;
+}
+
+export interface HomepageSection {
+  id: 'hero' | 'purchased' | 'topRated' | 'allProducts' | 'services' | 'about' | 'trust' | 'faq' | 'upcoming' | 'news';
+  visible: boolean;
+  title?: string;
+}
+
+export interface NewsArticle {
+  id: number;
+  imageSeed: string;
+  category: string;
+  title: string;
+  excerpt: string;
+  date: string;
+  content: string;
+}
+
+export interface Announcement {
+  id: number;
+  title: string;
+  content: string;
+  date: string;
+}
+
+export interface OrderItem {
+  id: number | string;
+  name: string;
+  quantity: number;
+  price: string;
+}
+
+export interface Order {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  date: string;
+  total: string;
+  status: 'Pending' | 'Shipped' | 'Completed' | 'Cancelled';
+  items: OrderItem[];
+  shippingAddress: string;
+  billingAddress: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  subject: string;
+  message: string;
+  date: string;
+  status: 'Open' | 'Resolved' | 'Pending';
+}
+
+export interface Subscriber {
+  id: number;
+  email: string;
+  message: string;
+  date: string;
+  lastEmailedDate?: string;
+}
+
+export interface EmailLog {
+  id: number;
+  date: string;
+  time: string;
+  count: number;
+  recipientIds: number[];
+}
+
+export interface SubscriptionTier {
+  id: string;
+  name: string;
+  price: string;
+  description: string;
+  features: string[];
+  paymentLink: string;
+  isRecommended?: boolean;
+  highlightColor?: string;
+  productAccess?: 'all' | 'specific' | 'none';
+  accessProductIds?: number[];
+}
+
+export interface EbookReaderSettings {
+  defaultTheme: 'light' | 'sepia' | 'dark' | 'slate' | 'green';
+  defaultFontSize: number;
+  defaultFontFamily: string;
+  availableFonts: string[];
+}
+
+export interface ThemePalette {
+  primaryColor: string;
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+  textMutedColor: string;
+}
+
+export interface WebsiteSettings {
+  theme: {
+    activeTheme: string;
+    primaryColor: string;
+    accentColor: string;
+    backgroundColor: string;
+    textColor: string;
+    textMutedColor: string;
+    fontPairing: 'inter-lato' | 'roboto-merriweather' | 'montserrat-oswald';
+    cornerRadius: string;
+    shadowIntensity: string;
+  };
+  layout: HomepageSection[];
+  features: {
+    showFavourites: boolean;
+    showReviews: boolean;
+    showSaleBadges: boolean;
+  };
+  validation: {
+    productTitleMinLength: number;
+  };
+  apiKeys: {
+    google?: string;
+    openai?: string;
+    anthropic?: string;
+    deepseek?: string;
+    grok?: string;
+    razorpay?: string;
+    gemini?: string;
+  };
+  content: {
+    heroTitle: string;
+    heroSubtitle: string;
+    heroMetrics: {
+      enableRealData: boolean;
+      customRevenue: string;
+      customRevenueChange: string;
+      customActiveUsers: string;
+    };
+    footerText: string;
+    aboutUsTitle: string;
+    aboutUsText: string;
+    aboutUsImageUrl: string;
+    services: ServiceItem[];
+    faqs: FaqItem[];
+    upcomingFeatures: UpcomingFeatureItem[];
+    newsArticles: NewsArticle[];
+    announcements: Announcement[];
+    subscriptionTiers: SubscriptionTier[];
+    socialLinks: {
+      facebook: string;
+      twitter: string;
+      instagram: string;
+      linkedin: string;
+      pinterest: string;
+      discord: string;
+      reddit: string;
+      quora: string;
+    };
+  };
+  animations: {
+    enabled: boolean;
+    style: 'fade-up' | 'zoom-in';
+  };
+  ebookReaderSettings: EbookReaderSettings;
+}
+
+// ==========================================
+// --- INITIAL DATA (Fallbacks) ---
+// ==========================================
+
+const initialProducts: Product[] = [
+  {
+    id: 1,
+    imageSeed: "ebook-marketing",
+    images: ["https://picsum.photos/seed/digital-marketing-ebook-cover/800/600"],
+    title: "The Ultimate Marketing Guide",
+    description: "A comprehensive e-book covering everything from SEO to social media marketing.",
+    longDescription: "Unlock the secrets of digital marketing with this all-in-one guide. Perfect for beginners and experts alike.",
+    features: ["In-depth SEO strategies", "Social Media content calendar", "Email Marketing templates"],
+    price: "₹499",
+    salePrice: "₹299",
+    category: "E-books",
+    department: 'Unisex',
+    inStock: true,
+    isVisible: true,
+    manualRating: 5,
+    fileFormat: 'pdf', 
+    fileUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', 
+    paymentLink: "",
+    courseContent: [
+        { 
+            id: 'mod-marketing-1', 
+            title: 'Module 1: Introduction', 
+            files: [], 
+            modules: [] 
+        }
+    ],
+    paymentConfig: { enabled: true }
+  }
+];
+
+const defaultWebsiteSettings: WebsiteSettings = {
+    theme: {
+        activeTheme: 'default',
+        primaryColor: '#02042b',
+        accentColor: '#528ff0',
+        backgroundColor: '#f9fafb',
+        textColor: '#1f2937',
+        textMutedColor: '#6b7280',
+        fontPairing: 'inter-lato',
+        cornerRadius: '0.75rem',
+        shadowIntensity: 'medium'
+    },
+    layout: [
+        { id: 'hero', visible: true },
+        { id: 'purchased', visible: true },
+        { id: 'topRated', visible: true, title: 'Top Rated Products' },
+        { id: 'allProducts', visible: true },
+        { id: 'services', visible: true },
+        { id: 'about', visible: true },
+        { id: 'trust', visible: true },
+        { id: 'upcoming', visible: true, title: "What's Next?" },
+        { id: 'faq', visible: true }
+    ],
+    features: {
+        showFavourites: true,
+        showReviews: true,
+        showSaleBadges: true
+    },
+    validation: {
+        productTitleMinLength: 3
+    },
+    apiKeys: {},
+    content: {
+        heroTitle: "Elevate Your Digital Presence",
+        heroSubtitle: "We provide top-tier digital products, marketing services, and e-commerce solutions to boost your business.",
+        heroMetrics: {
+            enableRealData: false,
+            customRevenue: "+128%",
+            customRevenueChange: "+128%",
+            customActiveUsers: "2.4k+"
+        },
+        footerText: "© {year} Digital Catalyst. All rights reserved.",
+        aboutUsTitle: "About Digital Catalyst",
+        aboutUsText: "At Digital Catalyst, we are more than just a digital marketplace. We are a team of passionate creators and developers dedicated to providing high-quality digital assets.",
+        aboutUsImageUrl: "https://picsum.photos/seed/creative-marketing-team/800/600",
+        services: [],
+        faqs: [],
+        upcomingFeatures: [],
+        newsArticles: [],
+        announcements: [],
+        subscriptionTiers: [
+            {
+                id: 'tier-standard',
+                name: 'Standard Plan',
+                price: '213',
+                description: 'Starter pack for students',
+                features: ['Basic Access', 'PDF Downloads'],
+                paymentLink: '',
+                highlightColor: 'blue',
+                productAccess: 'specific',
+                accessProductIds: []
+            },
+            {
+                id: 'tier-pro',
+                name: 'Pro Plan',
+                price: '499',
+                description: 'For serious learners',
+                features: ['All Standard Features', 'Video Content', 'Priority Support'],
+                paymentLink: '',
+                highlightColor: 'gold',
+                productAccess: 'all',
+                accessProductIds: []
+            }
+        ],
+        socialLinks: {
+            facebook: "https://facebook.com",
+            twitter: "https://twitter.com",
+            instagram: "https://instagram.com",
+            linkedin: "https://linkedin.com",
+            pinterest: "https://pinterest.com",
+            discord: "https://discord.com",
+            reddit: "https://reddit.com",
+            quora: "https://quora.com"
+        }
+    },
+    animations: {
+        enabled: true,
+        style: 'fade-up'
+    },
+    ebookReaderSettings: {
+        defaultTheme: 'light',
+        defaultFontSize: 18,
+        defaultFontFamily: 'serif',
+        availableFonts: ['serif', 'sans-serif']
+    },
+};
+
+// ==========================================
+// --- ERROR BOUNDARY ---
+// ==========================================
+
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
+  state = { hasError: false, error: null };
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  render() {
+    if (this.state.hasError) return (
+        <div className="min-h-screen flex items-center justify-center flex-col p-10 text-center text-red-600 bg-red-50">
+            <h1 className="text-3xl font-bold mb-4">Something went wrong.</h1>
+            <p className="mb-4 text-gray-700">{this.state.error?.message}</p>
+            <button onClick={() => window.location.reload()} className="mt-4 px-6 py-3 bg-red-600 text-white rounded shadow hover:bg-red-700 transition">
+                Reload Application
+            </button>
+        </div>
+    );
+    return (this.props as any).children;
+  }
+}
+
+// ==========================================
+// --- INLINE COMPONENTS (BlogDetail) ---
+// ==========================================
+
+const BlogDetail: React.FC<{
+  settings: WebsiteSettings;
+  article: NewsArticle;
+  onBack: () => void;
+}> = ({ settings, article, onBack }) => {
+  return (
+    <div className="bg-background min-h-screen font-sans animate-fade-in">
+      <header className="bg-white shadow-md sticky top-0 z-10">
+        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
+          <h1 className="text-xl font-bold text-primary truncate">Catalyst Blog</h1>
+          <button
+            onClick={onBack}
+            className="bg-primary text-white font-semibold px-6 py-2 rounded-lg hover:opacity-90 transition-colors duration-300"
+          >
+            &larr; Back to Blog List
+          </button>
+        </div>
+      </header>
+      <main className="container mx-auto px-6 py-12">
+        <div className="max-w-4xl mx-auto bg-white p-8 sm:p-12 rounded-lg shadow-lg animate-fade-in-up">
+          <div className="mb-8 border-b pb-6">
+            <p className="text-sm font-semibold text-primary tracking-widest uppercase">{article.category}</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-primary mt-2">{article.title}</h2>
+            <p className="text-sm text-text-muted mt-4">
+              Published on {new Date(article.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+          </div>
+          <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden mb-8 shadow-inner">
+            <img src={`https://picsum.photos/seed/${article.imageSeed}/1200/675`} alt={article.title} className="w-full h-full object-cover" />
+          </div>
+          
+          <div className="text-lg text-text leading-relaxed space-y-6">
+            {article.content.split('\n').filter(p => p.trim() !== '').map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+            ))}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+// ==========================================
+// --- MAIN APP COMPONENT ---
+// ==========================================
+
+const App: React.FC = () => {
+    // ------------------------------------------
+    // --- State Management ---
+    // ------------------------------------------
+    
+    // Core Data (Synced with Firebase)
+    const [products, setProducts] = useState<Product[]>([]);
+    const [websiteSettings, setWebsiteSettings] = useState<WebsiteSettings>(defaultWebsiteSettings);
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [coupons, setCoupons] = useState<Coupon[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+    const [rawReviews, setRawReviews] = useState<Review[]>([]);
+    const [tickets, setTickets] = useState<SupportTicket[]>([]);
+    const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
+    const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]); // SYNCED
+    
+    // Auth & Navigation
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [currentAdminUser, setCurrentAdminUser] = useState<AdminUser | null>(null);
+    const [currentView, setCurrentView] = useState('home');
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Session/UI State
+    const [selectedProduct, setSelectedProduct] = useState<ProductWithRating | null>(null);
+    const [wishlist, setWishlist] = useState<number[]>([]); 
+    const [cart, setCart] = useState<CartItem[]>([]);
+    const [purchasedProductIds, setPurchasedProductIds] = useState<(number|string)[]>([]);
+    const [scrollToProductSection, setScrollToProductSection] = useState<string | null>(null);
+    const [scrollToPolicySection, setScrollToPolicySection] = useState<string | null>(null);
+    
+    // NEW: Smart Reader States
+    const [activePdf, setActivePdf] = useState<{url: string, id: string} | null>(null);
+    const [adminEditingProduct, setAdminEditingProduct] = useState<Product | null>(null);
+
+    // Modals & Popups State
+    const [isCartOpen, setIsCartOpen] = useState(false);
+    const [isCartPaymentModalOpen, setIsCartPaymentModalOpen] = useState(false);
+    const [quickViewProduct, setQuickViewProduct] = useState<ProductWithRating | null>(null);
+    const [checkoutSubscription, setCheckoutSubscription] = useState<SubscriptionTier | null>(null);
+    const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+    const [modulePayment, setModulePayment] = useState<{moduleId: string, price: number, name: string} | null>(null);
+    const [isBlogModalOpen, setIsBlogModalOpen] = useState(false);
+    const [isFreeModalOpen, setIsFreeModalOpen] = useState(false);
+    const [isAnnouncementsModalOpen, setIsAnnouncementsModalOpen] = useState(false);
+    const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+    const [cartToastMessage, setCartToastMessage] = useState('');
+    const [appliedCartCoupon, setAppliedCartCoupon] = useState<Coupon | null>(null);
+    const [cartCouponError, setCartCouponError] = useState<string | null>(null);
+    const [productToBuyAfterLogin, setProductToBuyAfterLogin] = useState<ProductWithRating | null>(null);
+    const [subscriptionToBuyAfterLogin, setSubscriptionToBuyAfterLogin] = useState<SubscriptionTier | null>(null);
+    const [autoOpenPaymentModalFor, setAutoOpenPaymentModalFor] = useState<number | null>(null);
+    const [subscribedEmail, setSubscribedEmail] = useState('');
+    const [infoModal, setInfoModal] = useState<{ title: string; message: string; icon: string; } | null>(null);
+
+    // ------------------------------------------
+    // --- FIREBASE SYNC: CRITICAL UPDATES ---
+    // ------------------------------------------
+
+    // 1. Settings Sync
+    useEffect(() => {
+        const unsubscribe = onSnapshot(doc(db, "settings", "global"), (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                setWebsiteSettings(docSnapshot.data() as WebsiteSettings);
+            } else {
+                setDoc(doc(db, "settings", "global"), defaultWebsiteSettings); // Initialize
+            }
+            setIsLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // 2. Products Sync
+    useEffect(() => {
+        const unsubscribe = onSnapshot(collection(db, "products"), (snapshot) => {
+            const loaded = snapshot.docs.map(d => d.data() as Product);
+            setProducts(loaded.length > 0 ? loaded.sort((a,b) => a.id - b.id) : initialProducts);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // 3. Other Collections Sync
+    useEffect(() => {
+        const unsubCoupons = onSnapshot(collection(db, "coupons"), snap => setCoupons(snap.docs.map(d => d.data() as Coupon)));
+        const unsubOrders = onSnapshot(collection(db, "orders"), snap => setOrders(snap.docs.map(d => d.data() as Order)));
+        const unsubUsers = onSnapshot(collection(db, "users"), snap => setUsers(snap.docs.map(d => d.data() as User)));
+        const unsubAdmins = onSnapshot(collection(db, "adminUsers"), snap => setAdminUsers(snap.docs.map(d => d.data() as AdminUser)));
+        const unsubReviews = onSnapshot(collection(db, "reviews"), snap => setRawReviews(snap.docs.map(d => d.data() as Review)));
+        const unsubTickets = onSnapshot(collection(db, "tickets"), snap => setTickets(snap.docs.map(d => d.data() as SupportTicket)));
+        const unsubSubs = onSnapshot(collection(db, "subscribers"), snap => setSubscribers(snap.docs.map(d => d.data() as Subscriber)));
+        
+        // NEW: Sync Email Logs
+        const unsubEmailLogs = onSnapshot(collection(db, "emailLogs"), snap => setEmailLogs(snap.docs.map(d => d.data() as EmailLog)));
+
+        return () => { 
+            unsubCoupons(); 
+            unsubOrders(); 
+            unsubUsers(); 
+            unsubAdmins(); 
+            unsubReviews(); 
+            unsubTickets(); 
+            unsubSubs(); 
+            unsubEmailLogs();
+        };
+    }, []);
+
+    // ------------------------------------------
+    // --- DYNAMIC THEMING ---
+    // ------------------------------------------
+    useEffect(() => {
+        const root = document.documentElement;
+        const theme = websiteSettings.theme;
+        root.style.setProperty('--color-primary', theme.primaryColor);
+        root.style.setProperty('--color-accent', theme.accentColor);
+        root.style.setProperty('--color-background', theme.backgroundColor);
+        root.style.setProperty('--color-text', theme.textColor);
+        root.style.setProperty('--color-text-muted', theme.textMutedColor);
+        root.style.setProperty('--style-corner-radius', theme.cornerRadius);
+    }, [websiteSettings.theme]);
+
+    // ------------------------------------------
+    // --- DERIVED DATA & CALCULATIONS ---
+    // ------------------------------------------
+    const reviews = React.useMemo(() => {
+        const grouped: { [productId: number]: Review[] } = {};
+        rawReviews.forEach(r => {
+            if (!grouped[r.productId]) grouped[r.productId] = [];
+            grouped[r.productId].push(r);
+        });
+        return grouped;
+    }, [rawReviews]);
+
+    const calculateAverageRating = (productId: number) => {
+        const pReviews = reviews[productId] || [];
+        if (pReviews.length === 0) return { rating: 0, reviewCount: 0 };
+        const total = pReviews.reduce((acc, r) => acc + r.rating, 0);
+        return { rating: total / pReviews.length, reviewCount: pReviews.length };
+    };
+
+    const productsWithRatings: ProductWithRating[] = products.map(p => {
+        const { rating, reviewCount } = calculateAverageRating(p.id);
+        return { ...p, rating: p.manualRating ?? rating, reviewCount, calculatedRating: rating };
+    });
+
+    const visibleProducts = productsWithRatings.filter(p => p.isVisible !== false);
+    const topRatedProducts = [...visibleProducts].sort((a, b) => b.rating - a.rating).slice(0, 3);
+    const purchasedProducts = productsWithRatings.filter(p => purchasedProductIds.includes(p.id));
+    const wishlistProducts = visibleProducts.filter(p => wishlist.includes(p.id));
+    const freeProducts = visibleProducts.filter(p => p.isFree);
+
+    // Calculate Purchases based on Orders + Current User
+    useEffect(() => {
+        if (!currentUser) {
+            setPurchasedProductIds([]);
+            return;
+        }
+        const myOrders = orders.filter(o => o.customerEmail === currentUser.email && o.status === 'Completed');
+        const ids = new Set<(number|string)>();
+        myOrders.forEach(o => o.items.forEach(i => ids.add(i.id)));
+        setPurchasedProductIds(Array.from(ids));
+    }, [orders, currentUser]);
+
+    // ------------------------------------------
+    // --- ANALYTICS HANDLERS (Wishlist & Views) ---
+    // ------------------------------------------
+    
+    // UPDATED: Sync Wishlist count to Database for Admin Analytics
+    const handleToggleWishlist = async (id: number) => {
+        const isWishlisting = !wishlist.includes(id);
+        
+        // 1. Update Local UI immediately
+        setWishlist(prev => isWishlisting ? [...prev, id] : prev.filter(w => w !== id));
+        
+        // 2. Update Database Analytics (Firestore)
+        try {
+            const productRef = doc(db, "products", id.toString());
+            await updateDoc(productRef, { 
+                wishlistCount: increment(isWishlisting ? 1 : -1) 
+            });
+        } catch (error: any) {
+            // Handle missing document (e.g. initial items)
+            if (error.code === 'not-found' || error.message?.includes('No document to update')) {
+                const productToCreate = products.find(p => p.id === id);
+                if (productToCreate) {
+                    const productRef = doc(db, "products", id.toString());
+                    await setDoc(productRef, { 
+                        ...productToCreate,
+                        wishlistCount: (productToCreate.wishlistCount || 0) + (isWishlisting ? 1 : 0)
+                    });
+                }
+            } else {
+                console.error("Error updating wishlist analytics:", error);
+            }
+        }
+    };
+    
+    // UPDATED: Sync View count to Database for Admin Analytics
+    const handleViewProduct = async (p: ProductWithRating) => {
+         setSelectedProduct(p);
+         setCurrentView('product');
+         
+         // Only count views from non-admin users to keep analytics real
+         if (!currentAdminUser) {
+             try {
+                 const productRef = doc(db, "products", p.id.toString());
+                 await updateDoc(productRef, { 
+                     viewCount: increment(1) 
+                 });
+             } catch (error: any) {
+                 // Handle missing document (e.g. initial items)
+                 if (error.code === 'not-found' || error.message?.includes('No document to update')) {
+                     const productRef = doc(db, "products", p.id.toString());
+                     await setDoc(productRef, { 
+                         ...p,
+                         viewCount: (p.viewCount || 0) + 1
+                     });
+                 } else {
+                     console.error("Error updating view analytics:", error);
+                 }
+             }
+         }
+    };
+
+    // ------------------------------------------
+    // --- CART LOGIC ---
+    // ------------------------------------------
+    const handleAddToCart = (id: number, qty = 1) => {
+        setCart(prev => {
+            const exists = prev.find(i => i.productId === id);
+            return exists ? prev.map(i => i.productId === id ? { ...i, quantity: i.quantity + qty } : i) : [...prev, { productId: id, quantity: qty }];
+        });
+        setCartToastMessage('Added to cart');
+        setIsCartOpen(true);
+    };
+    
+    const cartDetails = cart.map(item => {
+        const p = productsWithRatings.find(p => p.id === item.productId);
+        return p ? { ...item, product: p } : null;
+    }).filter((i): i is { product: ProductWithRating } & CartItem => i !== null);
+    
+    const cartSubtotal = cartDetails.reduce((acc, item) => acc + (parseFloat((item.product.salePrice || item.product.price).replace('₹', '')) * item.quantity), 0);
+    const calculateDiscount = (c: Coupon, p: number) => c.type === 'fixed' ? Math.min(c.value, p) : (p * c.value) / 100;
+    const cartCouponDiscount = appliedCartCoupon ? calculateDiscount(appliedCartCoupon, cartSubtotal) : 0;
+    const cartFinalPrice = cartSubtotal - cartCouponDiscount;
+    const cartItemCount = cart.reduce((t, i) => t + i.quantity, 0);
+
+    // ------------------------------------------
+    // --- DATABASE ACTIONS (Firestore) ---
+    // ------------------------------------------
+
+    const handleWebsiteSettingsUpdate = async (newSettings: WebsiteSettings) => {
+        setWebsiteSettings(newSettings); 
+        await setDoc(doc(db, "settings", "global"), newSettings);
+    };
+
+    const handleAddProduct = async (p: Omit<Product, 'id'>) => {
+        const newId = Date.now();
+        await setDoc(doc(db, "products", newId.toString()), { ...p, id: newId });
+    };
+
+    const handleUpdateProduct = async (p: Product) => {
+        await updateDoc(doc(db, "products", p.id.toString()), { ...p });
+    };
+
+    const handleDeleteProduct = async (id: number) => {
+        if(window.confirm("Are you sure?")) await deleteDoc(doc(db, "products", id.toString()));
+    };
+
+    const handleAddReview = async (pId: number, d: Omit<Review, 'name' | 'date'>) => {
+        const review = {
+            productId: pId,
+            name: currentUser?.email.split('@')[0] || 'Customer',
+            date: new Date().toISOString().split('T')[0],
+            rating: d.rating,
+            comment: d.comment
+        };
+        await addDoc(collection(db, "reviews"), review);
+    };
+
+    const handleSubscribe = async (email: string, message: string) => {
+        const sub = { id: Date.now(), email, message, date: new Date().toISOString() };
+        await addDoc(collection(db, "subscribers"), sub);
+        setSubscribedEmail(email);
+        setIsSubscriptionModalOpen(true);
+    };
+
+    // ------------------------------------------
+    // --- USER, ADMIN & NEWSLETTER MANAGEMENT ---
+    // ------------------------------------------
+
+    // DELETE USER
+    const handleDeleteUser = async (userId: number) => {
+        if (!window.confirm("Delete this user permanently?")) return;
+        try {
+            // Find the document where field 'id' matches userId
+            const q = query(collection(db, "users"), where("id", "==", userId));
+            const querySnapshot = await getDocs(q);
+            
+            // Delete all matching documents (should be unique)
+            querySnapshot.forEach(async (d) => {
+                await deleteDoc(d.ref);
+            });
+            alert("User deleted successfully.");
+        } catch (e) {
+            console.error("Error deleting user:", e);
+            alert("Failed to delete user. Check console.");
+        }
+    };
+
+    // DELETE SUBSCRIBER
+    const handleDeleteSubscriber = async (subId: number) => {
+        if (!window.confirm("Remove this subscriber?")) return;
+        try {
+            const q = query(collection(db, "subscribers"), where("id", "==", subId));
+            const querySnapshot = await getDocs(q);
+            querySnapshot.forEach(async (d) => { await deleteDoc(d.ref); });
+            alert("Subscriber removed.");
+        } catch (e) { console.error(e); alert("Error removing subscriber."); }
+    };
+
+    // SEND EMAIL (SAVE LOG)
+    const handleSendEmail = async (log: EmailLog) => {
+        try {
+             // 1. Save the Log
+             await addDoc(collection(db, "emailLogs"), log);
+             alert("Email sent and log saved!");
+        } catch (e) { console.error(e); alert("Error saving email log."); }
+    };
+
+    // --- NEW: HANDLE ADMIN READER OPENING ---
+    const handleAdminOpenReader = (product: Product) => {
+        if (!product.fileUrl) {
+            alert("Please add a PDF URL to this product first via the 'Edit' menu.");
+            return;
+        }
+        setAdminEditingProduct(product); // Activate Admin Mode for Reader
+        setActivePdf({
+            url: product.fileUrl,
+            id: product.id.toString()
+        });
+    };
+
+    const handleAdminUserUpdate = (admins: AdminUser[]) => {
+        alert("To manage admins, please use the Firestore Console directly for security in this demo.");
+    };
+
+    // ------------------------------------------
+    // --- PURCHASE HANDLER ---
+    // ------------------------------------------
+    const handlePurchaseComplete = async (code: string | null, qty: number, type: 'product'|'subscription'|'module' = 'product', id?: string|number) => {
+        let finalPriceNum = 0;
+        let purchaseTitle = "Item";
+
+        if (type === 'product' && selectedProduct) {
+             const original = parseFloat(selectedProduct.price.replace('₹', ''));
+             const sale = selectedProduct.salePrice ? parseFloat(selectedProduct.salePrice.replace('₹', '')) : null;
+             finalPriceNum = (sale ?? original) * qty;
+             purchaseTitle = selectedProduct.title;
+        } else if (type === 'subscription' && id) {
+             const tier = websiteSettings.content.subscriptionTiers.find(t => t.id === id);
+             if (tier) { finalPriceNum = parseFloat(tier.price); purchaseTitle = `Subscription: ${tier.name}`; }
+        } else if (type === 'module' && modulePayment) {
+             finalPriceNum = modulePayment.price;
+             purchaseTitle = modulePayment.name;
+        }
+
+        const couponToApply = code ? coupons.find(c => c.code === code) : null;
+        let finalDiscount = 0;
+        if (couponToApply) finalDiscount = calculateDiscount(couponToApply, finalPriceNum);
+        
+        const newOrder: Order = {
+            id: `DC-${Date.now()}`,
+            customerName: currentUser?.email.split('@')[0] || 'Valued Customer',
+            customerEmail: currentUser?.email || 'customer@example.com',
+            date: new Date().toISOString(),
+            total: `₹${(finalPriceNum - finalDiscount).toFixed(2)}`,
+            status: 'Completed',
+            items: [{ id: id || (selectedProduct ? selectedProduct.id : 'unknown'), name: purchaseTitle, quantity: qty, price: `₹${finalPriceNum}` }],
+            shippingAddress: 'Digital', 
+            billingAddress: ''
+        };
+        
+        await addDoc(collection(db, "orders"), newOrder);
+        
+        if (code) {
+             // Future implementation: Update coupon usage count in Firestore
+        }
+
+        setCart([]); 
+        setIsCartPaymentModalOpen(false); 
+        setModulePayment(null); 
+        setCheckoutSubscription(null);
+        setCurrentView('congratulations'); 
+        window.scrollTo(0,0);
+    };
+
+    // ------------------------------------------
+    // --- AUTHENTICATION ---
+    // ------------------------------------------
+    const handleLogin = (e: string, p: string) => { 
+        const user = users.find(u => u.email === e && u.password === p);
+        if(user) { 
+            setCurrentUser(user); 
+            if(productToBuyAfterLogin) { 
+                setSelectedProduct(productToBuyAfterLogin); 
+                setCurrentView('product'); 
+                setAutoOpenPaymentModalFor(productToBuyAfterLogin.id); 
+            } else if(subscriptionToBuyAfterLogin) { 
+                setCheckoutSubscription(subscriptionToBuyAfterLogin); 
+                setCurrentView('subscriptionCheckout'); 
+            } else {
+                setCurrentView('home');
+            }
+            return true; 
+        }
+        return false; 
+    };
+    
+    const handleSignup = (e: string, p: string) => {
+        if(users.some(u => u.email === e)) return { success: false, message: "Email exists" };
+        const newUser = { id: Date.now(), email: e, password: p, createdAt: new Date().toISOString() };
+        addDoc(collection(db, "users"), newUser);
+        setCurrentUser(newUser); // Auto login
+        return { success: true, message: "" };
+    };
+
+    const handleAdminLogin = (e: string, p: string) => {
+        // Fallback for initial dev login if DB is empty
+        if (e === 'developer@digitalcatalyst.com' && p === 'admin') {
+            setCurrentAdminUser({ id: 1, email: e, password: p, role: 'Developer' });
+            setCurrentView('admin');
+            return true;
+        }
+        const admin = adminUsers.find(u => u.email === e && u.password === p);
+        if (admin) {
+            setCurrentAdminUser(admin);
+            setCurrentView('admin');
+            return true;
+        }
+        return false;
+    };
+    
+    // --- METRICS ---
+    const totalRevenueValue = orders.filter(o => o.status !== 'Cancelled').reduce((acc, order) => acc + (parseFloat(order.total.replace(/[^\d.]/g, '')) || 0), 0);
+    const realMetrics = { revenue: totalRevenueValue, users: users.length };
+
+    // ------------------------------------------
+    // --- RENDER HELPERS ---
+    // ------------------------------------------
+
+    const renderContent = () => {
+        // --- SMART READER LOGIC ---
+        if (activePdf) {
+            // Check if user is Admin OR if product is free/purchased (Purchase logic not fully enforced in this demo snippet)
+            const isAdminMode = !!adminEditingProduct;
+            
+            return (
+                <SmartReader 
+                    userId={currentUser?.id?.toString() || 'guest'}
+                    fileUrl={activePdf.url}
+                    fileId={activePdf.id}
+                    apiKey={websiteSettings.apiKeys.gemini || ''} // Using Gemini Key
+                    isAdmin={isAdminMode} // Enable Admin Features if editing
+                    onClose={() => {
+                        setActivePdf(null);
+                        setAdminEditingProduct(null); // Reset admin mode
+                    }}
+                />
+            );
+        }
+        // --------------------------
+
+        switch (currentView) {
+            case 'product': 
+                return selectedProduct && (
+                    <ProductDetailPage 
+                        settings={websiteSettings} 
+                        product={selectedProduct} 
+                        onBack={() => setCurrentView('allProducts')} 
+                        onPurchase={(code, qty) => handlePurchaseComplete(code, qty)} 
+                        isWishlisted={wishlist.includes(selectedProduct.id)} 
+                        onToggleWishlist={handleToggleWishlist} 
+                        reviews={reviews[selectedProduct.id] || []} 
+                        onAddReview={(d) => handleAddReview(selectedProduct.id, d)} 
+                        isLoggedIn={!!currentUser} 
+                        onLoginRequired={() => { setProductToBuyAfterLogin(selectedProduct); setCurrentView('auth'); }} 
+                        autoOpenPaymentModal={autoOpenPaymentModalFor === selectedProduct.id} 
+                        onModalOpened={() => setAutoOpenPaymentModalFor(null)} 
+                        coupons={coupons} 
+                        scrollToSection={scrollToProductSection} 
+                        onSectionScrolled={() => setScrollToProductSection(null)} 
+                        onAddToCart={handleAddToCart} 
+                        allProducts={productsWithRatings} 
+                        onViewProduct={(p) => { setSelectedProduct(p); setCurrentView('product'); }} 
+                        wishlist={wishlist} 
+                        onQuickView={setQuickViewProduct} 
+                        onGoHome={() => setCurrentView('home')} 
+                    />
+                );
+            case 'coursePlayer': 
+                return selectedProduct && (
+                    <CoursePlayer 
+                        settings={websiteSettings} 
+                        product={selectedProduct} 
+                        onBack={() => setCurrentView('myPurchases')} 
+                        purchasedIds={purchasedProductIds} 
+                        onPurchaseModule={(mid, price, name) => setModulePayment({moduleId: mid, price: parseFloat(price), name})} 
+                    />
+                );
+            case 'ebookReader': 
+                return selectedProduct && (
+                    <EbookReader 
+                        settings={websiteSettings} 
+                        product={selectedProduct} 
+                        onBack={() => setCurrentView('myPurchases')} 
+                    />
+                );
+            case 'congratulations': 
+                return (
+                    <Congratulations 
+                        settings={websiteSettings} 
+                        onBack={() => setCurrentView('home')} 
+                        product={selectedProduct} 
+                        reviews={[]} 
+                        onAddReview={() => {}} 
+                        onGoToPurchases={() => setCurrentView('myPurchases')} 
+                    />
+                );
+            case 'allProducts': 
+                return (
+                    <ProductShowcase 
+                        settings={websiteSettings} 
+                        products={visibleProducts} 
+                        onViewProduct={(p) => { setSelectedProduct(p); setCurrentView('product'); }} 
+                        wishlist={wishlist} 
+                        onToggleWishlist={(id) => setWishlist(prev => prev.includes(id) ? prev.filter(w=>w!==id) : [...prev, id])} 
+                        onAddToCart={handleAddToCart} 
+                        onQuickView={setQuickViewProduct} 
+                        coupons={coupons} 
+                    />
+                );
+            case 'myPurchases': 
+                return (
+                    <PurchasedProducts 
+                        settings={websiteSettings} 
+                        products={purchasedProducts} 
+                        // UPDATED: Opens SmartReader if PDF, else CoursePlayer
+                        onViewPurchasedProduct={(p) => {
+                            if (p.fileFormat === 'pdf' || p.category === 'E-books') {
+                                setActivePdf({
+                                    url: p.fileUrl || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', // Fallback
+                                    id: p.id.toString()
+                                });
+                            } else {
+                                setSelectedProduct(p); 
+                                setCurrentView('coursePlayer');
+                            }
+                        }} 
+                    />
+                );
+            case 'wishlist': 
+                return (
+                    <WishlistPage 
+                        settings={websiteSettings} 
+                        products={wishlistProducts} 
+                        onViewProduct={(p) => { setSelectedProduct(p); setCurrentView('product'); }} 
+                        wishlist={wishlist} 
+                        onToggleWishlist={(id) => setWishlist(prev => prev.includes(id) ? prev.filter(w=>w!==id) : [...prev, id])} 
+                        onNavigateToAllProducts={() => setCurrentView('allProducts')} 
+                        onAddToCart={handleAddToCart} 
+                        onQuickView={setQuickViewProduct} 
+                        onClearWishlist={() => setWishlist([])} 
+                        coupons={coupons} 
+                    />
+                );
+            case 'subscription': 
+                return (
+                    <SubscriptionPage 
+                        settings={websiteSettings} 
+                        onBack={() => setCurrentView('home')} 
+                        onPurchase={(tier) => { if(currentUser) { setCheckoutSubscription(tier); setCurrentView('subscriptionCheckout'); } else { setSubscriptionToBuyAfterLogin(tier); setCurrentView('auth'); } }} 
+                        purchasedIds={purchasedProductIds} 
+                    />
+                );
+            case 'subscriptionCheckout': 
+                return checkoutSubscription && (
+                    <SubscriptionCheckoutPage 
+                        settings={websiteSettings} 
+                        tier={checkoutSubscription} 
+                        currentUser={currentUser} 
+                        coupons={coupons} 
+                        onBack={() => setCurrentView('subscription')} 
+                        onConfirmPayment={(code, price) => handlePurchaseComplete(code, 1, 'subscription', checkoutSubscription.id)} 
+                    />
+                );
+            case 'home': 
+            default: return (
+                <>
+                    {websiteSettings.layout.map(section => {
+                        if (!section.visible) return null;
+                        switch(section.id) {
+                            case 'hero': return <Hero key={section.id} settings={websiteSettings} onNavigateToPolicies={() => setCurrentView('policies')} onNavigateToAllProducts={() => setCurrentView('allProducts')} onOpenBlogModal={() => setIsBlogModalOpen(true)} onOpenFreeModal={() => setIsFreeModalOpen(true)} onOpenAnnouncementsModal={() => setIsAnnouncementsModalOpen(true)} realMetrics={realMetrics} />;
+                            case 'purchased': return purchasedProducts.length > 0 && <PurchasedProducts key={section.id} settings={websiteSettings} products={purchasedProducts} onViewPurchasedProduct={(p) => { setSelectedProduct(p); setCurrentView('coursePlayer'); }} />;
+                            case 'topRated': return <FeaturedProducts key={section.id} settings={websiteSettings} title={section.title || "Top Rated"} products={topRatedProducts} onViewProduct={handleViewProduct} wishlist={wishlist} onToggleWishlist={handleToggleWishlist} onAddToCart={handleAddToCart} onQuickView={setQuickViewProduct} coupons={coupons} />;
+                            case 'allProducts': return <ProductShowcase key={section.id} settings={websiteSettings} products={visibleProducts} onViewProduct={handleViewProduct} wishlist={wishlist} onToggleWishlist={handleToggleWishlist} onAddToCart={handleAddToCart} onQuickView={setQuickViewProduct} coupons={coupons} />;
+                            case 'services': return <Services key={section.id} settings={websiteSettings} services={websiteSettings.content.services} onNavigateToHomeAndScroll={() => {}} />;
+                            case 'about': return <AboutUs key={section.id} settings={websiteSettings} title={websiteSettings.content.aboutUsTitle} text={websiteSettings.content.aboutUsText} imageUrl={websiteSettings.content.aboutUsImageUrl} />;
+                            case 'trust': return <TrustBadges key={section.id} settings={websiteSettings} />;
+                            case 'upcoming': return <UpcomingFeatures key={section.id} settings={websiteSettings} title={section.title || "Upcoming"} features={websiteSettings.content.upcomingFeatures} />;
+                            case 'faq': return <Faq key={section.id} settings={websiteSettings} faqs={websiteSettings.content.faqs} />;
+                            default: return null;
+                        }
+                    })}
+                </>
+            );
+        }
+    };
+
+    const renderPage = () => {
+        if (currentView === 'policies') 
+            return <PolicyPage settings={websiteSettings} onBack={() => setCurrentView('home')} scrollToSection={scrollToPolicySection} onSectionScrolled={() => setScrollToPolicySection(null)} />;
+        
+        if (currentView === 'auth') 
+            return <AuthPage settings={websiteSettings} onLogin={handleLogin} onSignup={handleSignup} onBack={() => setCurrentView('home')} />;
+        
+        if (currentView === 'adminLogin') 
+            return <AdminLogin settings={websiteSettings} onLogin={handleAdminLogin} onBack={() => setCurrentView('home')} />;
+        
+        if (currentView === 'admin' && currentAdminUser) 
+            return (
+                <AdminDashboard 
+                    websiteSettings={websiteSettings} 
+                    onWebsiteSettingsChange={handleWebsiteSettingsUpdate} 
+                    products={productsWithRatings} 
+                    reviews={reviews} 
+                    users={users} 
+                    coupons={coupons} 
+                    orders={orders} 
+                    tickets={tickets} 
+                    subscribers={subscribers} 
+                    emailLogs={emailLogs} 
+                    onAddProduct={handleAddProduct} 
+                    onUpdateProduct={handleUpdateProduct} 
+                    onDeleteProduct={handleDeleteProduct} 
+                    onDeleteUser={handleDeleteUser} 
+                    onAdminUsersUpdate={handleAdminUserUpdate} 
+                    onCouponsUpdate={() => {}} 
+                    onTicketsUpdate={() => {}} 
+                    onSubscribersUpdate={() => {}} 
+                    onEmailLogsUpdate={() => {}} 
+                    onDeleteSubscriber={handleDeleteSubscriber}
+                    onSendEmail={handleSendEmail}
+                    
+                    // --- NEW: CONNECTING ADMIN READER ---
+                    onManageEbook={handleAdminOpenReader}
+                    // ------------------------------------
+
+                    onLogout={() => { setCurrentAdminUser(null); setCurrentView('home'); }} 
+                    onSwitchToHome={() => setCurrentView('home')} 
+                    currentAdminUser={currentAdminUser} 
+                    adminUsers={adminUsers} 
+                />
+            );
+            
+        if (['coursePlayer', 'ebookReader', 'subscription', 'subscriptionCheckout'].includes(currentView)) 
+            return renderContent();
+        
+        if (currentView === 'announcementDetail' && selectedAnnouncement) 
+            return <AnnouncementDetail settings={websiteSettings} announcement={selectedAnnouncement} onBack={() => { setCurrentView('home'); setSelectedAnnouncement(null); setIsAnnouncementsModalOpen(true); }} />;
+        
+        if (currentView === 'blogDetail' && selectedArticle) 
+            return <BlogDetail settings={websiteSettings} article={selectedArticle} onBack={() => { setCurrentView('home'); setSelectedArticle(null); setIsBlogModalOpen(true); }} />;
+
+        return (
+            <div className="font-sans">
+                <Header 
+                    settings={websiteSettings} 
+                    wishlistCount={wishlist.length} 
+                    cartItemCount={cartItemCount} 
+                    cartToastMessage={cartToastMessage} 
+                    onCartClick={() => setIsCartOpen(true)} 
+                    onHomeClick={() => setCurrentView('home')} 
+                    onNavigateToAllProducts={() => setCurrentView('allProducts')} 
+                    onNavigateToPurchases={() => setCurrentView('myPurchases')} 
+                    onNavigateToWishlist={() => setCurrentView('wishlist')} 
+                    onNavigateToHomeAndScroll={() => {}} 
+                    currentUser={currentUser} 
+                    onLogout={() => { setCurrentUser(null); setCurrentView('home'); }} 
+                    onLoginClick={() => setCurrentView('auth')} 
+                    onNavigateToSubscriptions={() => setCurrentView('subscription')} 
+                />
+                
+                <CartSidebar 
+                    isOpen={isCartOpen} 
+                    onClose={() => setIsCartOpen(false)} 
+                    cartItems={cartDetails} 
+                    onUpdateQuantity={(id, q) => setCart(p => q<=0 ? p.filter(i=>i.productId!==id) : p.map(i=>i.productId===id ? {...i, quantity:q} : i))} 
+                    onRemoveItem={(id) => setCart(p => p.filter(i=>i.productId!==id))} 
+                    onViewProduct={(p) => { setSelectedProduct(p); setCurrentView('product'); setIsCartOpen(false); }} 
+                    onCheckout={() => { if(cart.length>0) setIsCartPaymentModalOpen(true); }} 
+                    onApplyCoupon={(c) => { const cp = coupons.find(i=>i.code===c); if(cp) setAppliedCartCoupon(cp); else setCartCouponError("Invalid"); }} 
+                    appliedCoupon={appliedCartCoupon} 
+                    couponError={cartCouponError} 
+                    onRemoveCoupon={() => setAppliedCartCoupon(null)} 
+                />
+                
+                {quickViewProduct && (
+                    <QuickViewModal 
+                        settings={websiteSettings} 
+                        product={quickViewProduct} 
+                        onClose={() => setQuickViewProduct(null)} 
+                        onAddToCart={handleAddToCart} 
+                        onToggleWishlist={(id) => setWishlist(p => p.includes(id)?p.filter(x=>x!==id):[...p,id])} 
+                        isWishlisted={wishlist.includes(quickViewProduct.id)} 
+                        onViewFullDetails={() => { setSelectedProduct(quickViewProduct); setCurrentView('product'); setQuickViewProduct(null); }} 
+                    />
+                )}
+                
+                {isCartPaymentModalOpen && (
+                    <PaymentModal 
+                        settings={websiteSettings} 
+                        cartItems={cartDetails} 
+                        originalPrice={cartSubtotal} 
+                        couponDiscount={cartCouponDiscount} 
+                        finalPrice={cartFinalPrice} 
+                        onClose={() => setIsCartPaymentModalOpen(false)} 
+                        onConfirm={() => handlePurchaseComplete(appliedCartCoupon?.code || null, 1)} 
+                    />
+                )}
+                
+                {modulePayment && (
+                    <PaymentModal 
+                        settings={websiteSettings} 
+                        productTitle={modulePayment.name} 
+                        originalPrice={modulePayment.price} 
+                        couponDiscount={0} 
+                        finalPrice={modulePayment.price} 
+                        onClose={() => setModulePayment(null)} 
+                        onConfirm={() => handlePurchaseComplete(null, 1, 'module', modulePayment.moduleId)} 
+                    />
+                )}
+                
+                {isSubscriptionModalOpen && (
+                    <SubscriptionSuccessModal 
+                        isOpen={isSubscriptionModalOpen} 
+                        onClose={() => setIsSubscriptionModalOpen(false)} 
+                        email={subscribedEmail} 
+                        products={topRatedProducts} 
+                        onNavigateToAllProducts={() => { setIsSubscriptionModalOpen(false); setCurrentView('allProducts'); }} 
+                    />
+                )}
+                
+                <ComingSoonModal isOpen={!!infoModal} onClose={() => setInfoModal(null)} title={infoModal?.title} message={infoModal?.message} icon={infoModal?.icon} />
+                
+                <BlogModal 
+                    isOpen={isBlogModalOpen} 
+                    onClose={() => setIsBlogModalOpen(false)} 
+                    articles={websiteSettings.content.newsArticles} 
+                    onReadMoreClick={(a) => { setSelectedArticle(a); setCurrentView('blogDetail'); setIsBlogModalOpen(false); }} 
+                    settings={websiteSettings} 
+                />
+                
+                <FreeProductsModal 
+                    isOpen={isFreeModalOpen} 
+                    onClose={() => setIsFreeModalOpen(false)} 
+                    products={freeProducts} 
+                    settings={websiteSettings} 
+                    onAddToCart={handleAddToCart} 
+                    onViewProduct={(p) => { setSelectedProduct(p); setCurrentView('product'); setIsFreeModalOpen(false); }} 
+                />
+                
+                <AnnouncementsModal 
+                    isOpen={isAnnouncementsModalOpen} 
+                    onClose={() => setIsAnnouncementsModalOpen(false)} 
+                    announcements={websiteSettings.content.announcements} 
+                    settings={websiteSettings} 
+                    onViewAnnouncement={(a) => { setSelectedAnnouncement(a); setCurrentView('announcementDetail'); setIsAnnouncementsModalOpen(false); }} 
+                />
+                
+                <main>{renderContent()}</main>
+                
+                <Footer 
+                    settings={websiteSettings} 
+                    socialLinks={websiteSettings.content.socialLinks} 
+                    onAdminLoginClick={() => setCurrentView('adminLogin')} 
+                    onLoginClick={() => setCurrentView('auth')} 
+                    onNavigateToAllProducts={() => setCurrentView('allProducts')} 
+                    onNavigateToHomeAndScroll={() => {}} 
+                    onNavigateToPolicies={() => setCurrentView('policies')} 
+                    onSubscribe={handleSubscribe} 
+                />
+            </div>
+        );
+    };
+
+    if (isLoading) return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600"></div>
+        </div>
+    );
+
+    return <ErrorBoundary>{renderPage()}</ErrorBoundary>;
+};
+
+export default App;

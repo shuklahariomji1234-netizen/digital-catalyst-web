@@ -1,0 +1,4 @@
+[build]
+  base = "your-best-code-ever.zip_unzipped"
+  command = "npm run build"
+  publish = "dist"
