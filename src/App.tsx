@@ -1,3 +1,7 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import AuthLandingPage from './pages/AuthLandingPage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase'; 
 import { 
@@ -1341,4 +1345,32 @@ const App: React.FC = () => {
     return <ErrorBoundary>{renderPage()}</ErrorBoundary>;
 };
 
-export default App;
+// ==========================================
+// --- NEW: ROUTING WRAPPER ---
+// ==========================================
+// This wraps your entire existing "App" to add the new Auth Pages
+// without breaking your complex state logic inside App.
+
+const MainRouterWrapper = () => {
+  return (
+    <Router>
+      <Routes>
+        {/* NEW SYSTEM WALLAH PAGES */}
+        <Route path="/system-wallah" element={<AuthLandingPage />} />
+        <Route path="/system-wallah/login" element={<LoginPage />} />
+        <Route path="/system-wallah/signup" element={<SignupPage />} />
+
+        {/* YOUR ORIGINAL APP (Load at root URL "/") */}
+        {/* We pass the existing App as the element for the home route */}
+        <Route path="/*" element={<AppContentWrapper />} />
+      </Routes>
+    </Router>
+  );
+};
+
+// Helper to make sure your Original App still works
+const AppContentWrapper = () => {
+  return <App />; 
+};
+
+export default MainRouterWrapper;

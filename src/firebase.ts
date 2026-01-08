@@ -1,34 +1,32 @@
-
-// @ts-ignore
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-// @ts-ignore
-import { getAuth } from 'firebase/auth';
-// @ts-ignore
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getAnalytics } from "firebase/analytics";
 
+// Using direct keys to ensure it works in your current environment
 const firebaseConfig = {
-apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-appId: import.meta.env.VITE_FIREBASE_APP_ID,
-measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyD0F0vSGMNnUc8Oac96jDQuYLcyLcyyFuE",
+  authDomain: "my-website-761e9.firebaseapp.com",
+  projectId: "my-website-761e9",
+  storageBucket: "my-website-761e9.firebasestorage.app",
+  messagingSenderId: "930483750234",
+  appId: "1:930483750234:web:8d84d7b39739a0ab5d5f63",
+  measurementId: "G-5SR5PEEFNQ"
 };
 
-// Initialize Firebase only if it hasn't been initialized yet
+// Initialize Firebase
 let app;
 try {
     if (!getApps().length) {
         app = initializeApp(firebaseConfig);
-        // Analytics is optional, initialize if supported
+        
+        // Analytics (Safe check)
         if (typeof window !== 'undefined') {
             try {
                 getAnalytics(app);
             } catch (e) {
-                console.log("Analytics not supported in this environment");
+                console.log("Analytics skipped");
             }
         }
     } else {
@@ -38,6 +36,8 @@ try {
     console.error("Firebase initialization error:", error);
 }
 
+// Export Services
 export const db = app ? getFirestore(app) : {} as any;
 export const storage = app ? getStorage(app) : {} as any;
 export const auth = app ? getAuth(app) : {} as any;
+export const googleProvider = new GoogleAuthProvider(); // NEW: Required for Google Login
